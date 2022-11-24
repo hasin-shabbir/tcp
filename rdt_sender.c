@@ -153,6 +153,9 @@ int main (int argc, char **argv)
                 memcpy(sndpkt->data, buffer, len);
             }
             sndpkt->hdr.seqno = next_seqno;
+            if(PACKET_BUFFER[next_seqno_index%10]!=NULL){
+                free(PACKET_BUFFER[next_seqno_index%10]);
+            }
             PACKET_BUFFER[next_seqno_index%10]=sndpkt;
 
             if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, 
