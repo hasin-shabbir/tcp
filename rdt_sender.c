@@ -188,8 +188,6 @@ int main (int argc, char **argv)
             timer_active=1;
         }
 
-        
-        
     }
 
     return 0;
