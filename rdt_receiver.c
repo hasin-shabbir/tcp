@@ -98,9 +98,7 @@ int main(int argc, char **argv) {
         recvpkt = (tcp_packet *) buffer;
         assert(get_data_size(recvpkt) <= DATA_SIZE);
         if ( recvpkt->hdr.data_size == 0) {
-            printf("seq number: %d\n",recvpkt->hdr.seqno);
-            printf("data size: %d\n",recvpkt->hdr.data_size);
-            //VLOG(INFO, "End Of File has been reached");
+            VLOG(INFO, "End Of File has been reached");
             fclose(fp);
             break;
         }

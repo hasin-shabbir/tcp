@@ -44,7 +44,7 @@ void resend_packets(int sig)
     {
         //Resend all packets range between 
         //sendBase and nextSeqNum
-        VLOG(INFO, "Timout happend");
+        VLOG(INFO, "Timeout happend");
         int curr = send_base_index;
         while(curr<next_seqno_index){
             if(sendto(sockfd, PACKET_BUFFER[curr%window_size], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%window_size]), 0, 
@@ -184,8 +184,6 @@ int main (int argc, char **argv)
         recvpkt = (tcp_packet *)buffer;
         send_base = recvpkt->hdr.ackno;
         send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
-        printf("nextseqno: %d",next_seqno_index);
-        printf("ACK ind: %d\n",send_base_index);
         if (send_base==file_end_seqno){
             sndpkt = make_packet(0);
             sndpkt->hdr.seqno = next_seqno;
