@@ -17,12 +17,13 @@
 
 #define STDIN_FD    0
 #define RETRY  120 //millisecond
-#define PACKET_BUFFER_SIZE
+#define PACKET_BUFFER_SIZE 10
 
 int next_seqno=0;
 int next_seqno_index = 0;
 int send_base=0;
 int send_base_index=0;
+int file_end_seqno = -1;
 int window_size = 10;
 int timer_active = 0;
 
@@ -141,7 +142,7 @@ int main (int argc, char **argv)
     int file_end = 0;
     while (1)
     {
-        while (next_seqno_index<send_base_index+window_size){
+        while (next_seqno_index<send_base_index+window_size && !file_end){
             len = fread(buffer, 1, DATA_SIZE, fp);
             if ( len <= 0){
                 VLOG(INFO, "End Of File has been reached");
@@ -164,7 +165,8 @@ int main (int argc, char **argv)
                 error("sendto");
             }
             if (file_end){
-                exit(0);
+                file_end_seqno = next_seqno;
+                break;
             }
             if(!timer_active){
                 start_timer();
@@ -180,7 +182,11 @@ int main (int argc, char **argv)
         recvpkt = (tcp_packet *)buffer;
         send_base = recvpkt->hdr.ackno;
         send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
-
+        printf("nextseqno: %d\n",next_seqno_index);
+        printf("ACK ind: %d\n",send_base_index);
+        if (send_base==file_end_seqno){
+            break;
+        }
         if(send_base==next_seqno){
             stop_timer();
             timer_active=0;
