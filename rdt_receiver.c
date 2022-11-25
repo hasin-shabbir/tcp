@@ -95,6 +95,14 @@ int main(int argc, char **argv) {
         if ( recvpkt->hdr.data_size == 0) {
             VLOG(INFO, "End Of File has been reached");
             fclose(fp);
+            //send ACK for EOF
+            sndpkt = make_packet(0);
+            sndpkt->hdr.ackno = recvpkt->hdr.seqno + recvpkt->hdr.data_size;
+            sndpkt->hdr.ctr_flags = ACK;
+            if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
+                    (struct sockaddr *) &clientaddr, clientlen) < 0) {
+                error("ERROR in sendto");
+            }
             break;
         }
         /* 
@@ -107,6 +115,7 @@ int main(int argc, char **argv) {
         if (recvpkt->hdr.seqno == next_seqno) {
             fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
             fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);
+            
             sndpkt = make_packet(0);
             sndpkt->hdr.ackno = recvpkt->hdr.seqno + recvpkt->hdr.data_size;
             sndpkt->hdr.ctr_flags = ACK;

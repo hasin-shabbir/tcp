@@ -205,6 +205,10 @@ int main (int argc, char **argv)
             }
             next_seqno = next_seqno + len;
             next_seqno_index +=1;
+            //wait for end of file signal ACK, else need to retransmit
+            if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
+                error("recvfrom");
+            }
             break;
         }
         //if send_base at next_seqno, stop timer
