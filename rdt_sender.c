@@ -163,16 +163,15 @@ int main (int argc, char **argv)
                 error("sendto");
             }
             if (file_end){
-                break;
+                exit(0);
             }
             if(!timer_active){
                 start_timer();
                 timer_active=1;
             }
-
             next_seqno = next_seqno + len;
             next_seqno_index +=1;
-
+            printf("next seq no ind: %d   | send_base_ind: %d  | window size: %d\n",next_seqno_index,send_base_index,window_size);
         }
 
         if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
@@ -180,7 +179,7 @@ int main (int argc, char **argv)
         }
         recvpkt = (tcp_packet *)buffer;
         send_base = recvpkt->hdr.ackno;
-        send_base_index = ceil((float)send_base/(float)MSS_SIZE);
+        send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
 
         if(send_base==next_seqno){
             stop_timer();
