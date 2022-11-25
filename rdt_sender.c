@@ -17,6 +17,7 @@
 
 #define STDIN_FD    0
 #define RETRY  120 //millisecond
+#define PACKET_BUFFER_SIZE
 
 int next_seqno=0;
 int next_seqno_index = 0;
@@ -26,7 +27,7 @@ int window_size = 10;
 int timer_active = 0;
 
 
-tcp_packet* PACKET_BUFFER[10];
+tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE];
 
 int sockfd, serverlen;
 struct sockaddr_in serveraddr;
@@ -45,7 +46,7 @@ void resend_packets(int sig)
         VLOG(INFO, "Timout happend");
         int curr = send_base_index;
         while(curr<next_seqno_index){
-            if(sendto(sockfd, PACKET_BUFFER[curr%10], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%10]), 0, 
+            if(sendto(sockfd, PACKET_BUFFER[curr%window_size], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%window_size]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
@@ -153,10 +154,10 @@ int main (int argc, char **argv)
                 memcpy(sndpkt->data, buffer, len);
             }
             sndpkt->hdr.seqno = next_seqno;
-            if(PACKET_BUFFER[next_seqno_index%10]!=NULL){
-                free(PACKET_BUFFER[next_seqno_index%10]);
+            if(PACKET_BUFFER[next_seqno_index%window_size]!=NULL){
+                free(PACKET_BUFFER[next_seqno_index%window_size]);
             }
-            PACKET_BUFFER[next_seqno_index%10]=sndpkt;
+            PACKET_BUFFER[next_seqno_index%window_size]=sndpkt;
 
             if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, 
                         ( const struct sockaddr *)&serveraddr, serverlen) < 0){
