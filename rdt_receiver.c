@@ -13,12 +13,6 @@
 #include "packet.h"
 
 
-/*
- * You are required to change the implementation to support
- * window size greater than one.
- * In the current implementation the window size is one, hence we have
- * only one send and receive packet
- */
 tcp_packet *recvpkt;
 tcp_packet *sndpkt;
 
@@ -90,13 +84,14 @@ int main(int argc, char **argv) {
         /*
          * recvfrom: receive a UDP datagram from a client
          */
-        //VLOG(DEBUG, "waiting from server \n");
         if (recvfrom(sockfd, buffer, MSS_SIZE, 0,
                 (struct sockaddr *) &clientaddr, (socklen_t *)&clientlen) < 0) {
             error("ERROR in recvfrom");
         }
         recvpkt = (tcp_packet *) buffer;
+        //ensure recv data is not greater than data_size
         assert(get_data_size(recvpkt) <= DATA_SIZE);
+        //exit if EOF reached
         if ( recvpkt->hdr.data_size == 0) {
             VLOG(INFO, "End Of File has been reached");
             fclose(fp);
@@ -108,6 +103,7 @@ int main(int argc, char **argv) {
         gettimeofday(&tp, NULL);
         VLOG(DEBUG, "%lu, %d, %d", tp.tv_sec, recvpkt->hdr.data_size, recvpkt->hdr.seqno);
 
+        //if in-order packet recvd, write the packet to file and send acknowledgement
         if (recvpkt->hdr.seqno == next_seqno) {
             fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
             fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);
@@ -121,6 +117,7 @@ int main(int argc, char **argv) {
             last_ackno = next_seqno + recvpkt->hdr.data_size;
             next_seqno += recvpkt->hdr.data_size;
         }
+        //if out of order packet recvd, send repeat ACK of previous in-order packet recvd
         else {
             sndpkt = make_packet(0);
             sndpkt->hdr.ackno = last_ackno;
