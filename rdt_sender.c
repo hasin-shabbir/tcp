@@ -42,20 +42,19 @@ void resend_packets(int sig)
     {
         //Resend all packets range between 
         //sendBase and nextSeqNum
+        VLOG(INFO, "Timout happend");
         int curr = send_base_index;
         while(curr<next_seqno_index){
             if(sendto(sockfd, PACKET_BUFFER[curr%10], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%10]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
-            printf("resent ind: %d | %d\n",curr, PACKET_BUFFER[curr%10]->hdr.seqno);
             if (!timer_active){
                 start_timer();
                 timer_active=1;
             }
             curr+=1;
         }
-        VLOG(INFO, "Timout happend");
         
     }
 }
@@ -172,7 +171,6 @@ int main (int argc, char **argv)
             }
             next_seqno = next_seqno + len;
             next_seqno_index +=1;
-            printf("next seq no ind: %d   | send_base_ind: %d  | window size: %d\n",next_seqno_index,send_base_index,window_size);
         }
 
         if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){

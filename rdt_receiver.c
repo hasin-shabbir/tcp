@@ -91,7 +91,6 @@ int main(int argc, char **argv) {
          * recvfrom: receive a UDP datagram from a client
          */
         //VLOG(DEBUG, "waiting from server \n");
-        printf("hello i am receiving\n");
         if (recvfrom(sockfd, buffer, MSS_SIZE, 0,
                 (struct sockaddr *) &clientaddr, (socklen_t *)&clientlen) < 0) {
             error("ERROR in recvfrom");
