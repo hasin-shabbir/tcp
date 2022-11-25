@@ -44,10 +44,11 @@ void resend_packets(int sig)
         //sendBase and nextSeqNum
         int curr = send_base_index;
         while(curr<next_seqno_index){
-            if(sendto(sockfd, PACKET_BUFFER[curr%10], TCP_HDR_SIZE + get_data_size(sndpkt), 0, 
+            if(sendto(sockfd, PACKET_BUFFER[curr%10], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%10]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
+            printf("resent ind: %d | %d\n",curr, PACKET_BUFFER[curr%10]->hdr.seqno);
             if (!timer_active){
                 start_timer();
                 timer_active=1;
