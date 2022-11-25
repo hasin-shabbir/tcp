@@ -146,34 +146,36 @@ int main (int argc, char **argv)
             len = fread(buffer, 1, DATA_SIZE, fp);
             if ( len <= 0){
                 VLOG(INFO, "End Of File has been reached");
-                sndpkt = make_packet(0);
-                
+                // sndpkt = make_packet(0);
                 file_end = 1;
+                file_end_seqno = next_seqno;
+                break;
             }
             else{
                 sndpkt = make_packet(len);
                 memcpy(sndpkt->data, buffer, len);
-            }
-            sndpkt->hdr.seqno = next_seqno;
-            if(PACKET_BUFFER[next_seqno_index%window_size]!=NULL){
-                free(PACKET_BUFFER[next_seqno_index%window_size]);
-            }
-            PACKET_BUFFER[next_seqno_index%window_size]=sndpkt;
+            
+                sndpkt->hdr.seqno = next_seqno;
+                if(PACKET_BUFFER[next_seqno_index%window_size]!=NULL){
+                    free(PACKET_BUFFER[next_seqno_index%window_size]);
+                }
+                PACKET_BUFFER[next_seqno_index%window_size]=sndpkt;
 
-            if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, 
-                        ( const struct sockaddr *)&serveraddr, serverlen) < 0){
-                error("sendto");
+                if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, 
+                            ( const struct sockaddr *)&serveraddr, serverlen) < 0){
+                    error("sendto");
+                }
+                // if (file_end){
+                //     file_end_seqno = next_seqno;
+                //     break;
+                // }
+                if(!timer_active){
+                    start_timer();
+                    timer_active=1;
+                }
+                next_seqno = next_seqno + len;
+                next_seqno_index +=1;
             }
-            if (file_end){
-                file_end_seqno = next_seqno;
-                break;
-            }
-            if(!timer_active){
-                start_timer();
-                timer_active=1;
-            }
-            next_seqno = next_seqno + len;
-            next_seqno_index +=1;
         }
 
         if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
@@ -182,9 +184,21 @@ int main (int argc, char **argv)
         recvpkt = (tcp_packet *)buffer;
         send_base = recvpkt->hdr.ackno;
         send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
-        printf("nextseqno: %d\n",next_seqno_index);
+        printf("nextseqno: %d",next_seqno_index);
         printf("ACK ind: %d\n",send_base_index);
         if (send_base==file_end_seqno){
+            sndpkt = make_packet(0);
+            sndpkt->hdr.seqno = next_seqno;
+            if(PACKET_BUFFER[next_seqno_index%window_size]!=NULL){
+                free(PACKET_BUFFER[next_seqno_index%window_size]);
+            }
+            PACKET_BUFFER[next_seqno_index%window_size]=sndpkt;
+            if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, 
+                            ( const struct sockaddr *)&serveraddr, serverlen) < 0){
+                error("sendto");
+            }
+            next_seqno = next_seqno + len;
+            next_seqno_index +=1;
             break;
         }
         if(send_base==next_seqno){
