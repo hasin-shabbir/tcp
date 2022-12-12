@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
             }
             last_ackno = next_seqno + recvpkt->hdr.data_size;
             next_seqno += recvpkt->hdr.data_size;
-            i = (next_seqno/MSS_SIZE)%PACKET_BUFFER_SIZE
+            int i = (next_seqno/MSS_SIZE)%PACKET_BUFFER_SIZE;
             while (PACKET_BUFFER[i]!=NULL){
                 next_seqno += PACKET_BUFFER[i]->hdr.data_size;
                 sndpkt = make_packet(0);
