@@ -134,7 +134,7 @@ int main(int argc, char **argv) {
                 sndpkt->hdr.ackno = PACKET_BUFFER[i]->hdr.seqno + PACKET_BUFFER[i]->hdr.data_size;
                 sndpkt->hdr.ctr_flags = ACK;
                 free(PACKET_BUFFER[i]);
-                i = (next_seqno/MSS_SIZE)%PACKET_BUFFER_SIZE
+                i = (next_seqno/MSS_SIZE)%PACKET_BUFFER_SIZE;
             }
             if (next_seqno != last_ackno) {
                 if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
