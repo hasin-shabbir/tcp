@@ -12,9 +12,11 @@
 #include "common.h"
 #include "packet.h"
 
+#define PACKET_BUFFER_SIZE 10
 
 tcp_packet *recvpkt;
 tcp_packet *sndpkt;
+tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE];
 
 int main(int argc, char **argv) {
     int sockfd; /* socket */
@@ -125,6 +127,22 @@ int main(int argc, char **argv) {
             }
             last_ackno = next_seqno + recvpkt->hdr.data_size;
             next_seqno += recvpkt->hdr.data_size;
+            i = (next_seqno/MSS_SIZE)%PACKET_BUFFER_SIZE
+            while (PACKET_BUFFER[i]!=NULL){
+                next_seqno += PACKET_BUFFER[i]->hdr.data_size;
+                sndpkt = make_packet(0);
+                sndpkt->hdr.ackno = PACKET_BUFFER[i]->hdr.seqno + PACKET_BUFFER[i]->hdr.data_size;
+                sndpkt->hdr.ctr_flags = ACK;
+                free(PACKET_BUFFER[i]);
+                i = (next_seqno/MSS_SIZE)%PACKET_BUFFER_SIZE
+            }
+            if (next_seqno != last_ackno) {
+                if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
+                        (struct sockaddr *) &clientaddr, clientlen) < 0) {
+                    error("ERROR in sendto");
+                }
+                last_ackno = sndpkt->hdr.ackno;
+            }
         }
         //if out of order packet recvd, send repeat ACK of previous in-order packet recvd
         else {
@@ -134,11 +152,13 @@ int main(int argc, char **argv) {
             if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
                     (struct sockaddr *) &clientaddr, clientlen) < 0) {
                 error("ERROR in sendto");
+            }
+            if(PACKET_BUFFER[(recvpkt->hdr.seqno/MSS_SIZE)%PACKET_BUFFER_SIZE]==NULL){
+                PACKET_BUFFER[(recvpkt->hdr.seqno/MSS_SIZE)%PACKET_BUFFER_SIZE]=recvpkt;
+            }
         }
 
     }
-
-}
 
     return 0;
 }
