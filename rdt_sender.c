@@ -15,9 +15,16 @@
 #include"packet.h"
 #include"common.h"
 
+#define MAX(a,b) (((a)>(b))?(a):(b));
+
 #define STDIN_FD    0
 #define RETRY  120 //millisecond
 #define PACKET_BUFFER_SIZE 10
+#define ALPHA 0.125 //for estimatedRTT calculation
+#define BETA 0.25 //for devRTT calculation
+//RTO bounds
+#define MAX_RTO 2500  
+#define MIN_RTO 100
 
 int next_seqno=0; //bytes-based
 int next_seqno_index = 0; //corresponding discrete index
@@ -32,67 +39,25 @@ tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE];
 
 int sockfd, serverlen;
 struct sockaddr_in serveraddr;
+
 struct itimerval timer; 
+struct timeval transmission_startTime, transmission_endTime;
+
+unsigned long rto = RETRY;
+double sampleRTT = 0.0;
+double estimatedRTT = 0.0;
+double devRTT = 0.0;
+
 tcp_packet *sndpkt;
 tcp_packet *recvpkt;
 sigset_t sigmask;       
 
 
-void resend_packets(int sig)
-{
-    if (sig == SIGALRM)
-    {
-        //Resend all packets range between 
-        //sendBase and nextSeqNum
-        VLOG(INFO, "Timeout happend");
-        int curr = send_base_index;
-        while(curr<next_seqno_index){
-            if(sendto(sockfd, PACKET_BUFFER[curr%window_size], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%window_size]), 0, 
-                ( const struct sockaddr *)&serveraddr, serverlen) < 0){
-                error("sendto");
-            }
-            //start timer if not already active
-            if (!timer_active){
-                start_timer();
-                timer_active=1;
-            }
-            curr+=1;
-        }
-        
-    }
-}
-
-
-void start_timer()
-{
-    sigprocmask(SIG_UNBLOCK, &sigmask, NULL);
-    setitimer(ITIMER_REAL, &timer, NULL);
-}
-
-
-void stop_timer()
-{
-    sigprocmask(SIG_BLOCK, &sigmask, NULL);
-}
-
-
-/*
- * init_timer: Initialize timer
- * delay: delay in milliseconds
- * sig_handler: signal handler function for re-sending unACKed packets
- */
-void init_timer(int delay, void (*sig_handler)(int)) 
-{
-    signal(SIGALRM, resend_packets);
-    timer.it_interval.tv_sec = delay / 1000;    // sets an interval of the timer
-    timer.it_interval.tv_usec = (delay % 1000) * 1000;  
-    timer.it_value.tv_sec = delay / 1000;       // sets an initial value
-    timer.it_value.tv_usec = (delay % 1000) * 1000;
-
-    sigemptyset(&sigmask);
-    sigaddset(&sigmask, SIGALRM);
-}
-
+void start_timer();
+void stop_timer();
+void resend_packets(int);
+void init_timer(int delay, void (*sig_handler)(int));
+void reset_timer_rtt();
 
 int main (int argc, char **argv)
 {
@@ -138,7 +103,7 @@ int main (int argc, char **argv)
 
     //Stop and wait protocol
 
-    init_timer(RETRY, resend_packets);
+    init_timer(rto, resend_packets);
     next_seqno = 0;
     int file_end = 0;
     while (1)
@@ -175,6 +140,8 @@ int main (int argc, char **argv)
                 //start timer if not active (oldest unacked packet in flight)
                 if(!timer_active){
                     start_timer();
+                    //get time when starting transmission
+                    gettimeofday(&transmission_startTime, NULL);
                     timer_active=1;
                 }
                 // increment seq no.
@@ -214,11 +181,26 @@ int main (int argc, char **argv)
         //if send_base at next_seqno, stop timer
         if(send_base==next_seqno){
             stop_timer();
+            //get time when ACK recvd
+            gettimeofday(&transmission_endTime, NULL);
+            
+            //reset timer based on rtt estimator
+            reset_timer_rtt();
+
             timer_active=0;
         }
         //restart timer again if an ACK recvd
         else{
+            //get time when ACK recvd
+            gettimeofday(&transmission_endTime, NULL);
+
+            //reset timer based on rtt estimator
+            reset_timer_rtt();
+
             start_timer();
+            //get time for next inflight packet
+            gettimeofday(&transmission_startTime, NULL);
+
             timer_active=1;
         }
 
@@ -226,4 +208,75 @@ int main (int argc, char **argv)
 
     return 0;
 
+}
+
+
+
+
+void start_timer(){
+    sigprocmask(SIG_UNBLOCK, &sigmask, NULL);
+    setitimer(ITIMER_REAL, &timer, NULL);
+}
+
+
+void stop_timer(){
+    sigprocmask(SIG_BLOCK, &sigmask, NULL);
+}
+
+/*
+ * init_timer: Initialize timer
+ * delay: delay in milliseconds
+ * sig_handler: signal handler function for re-sending unACKed packets
+ */
+void init_timer(int delay, void (*sig_handler)(int)){
+    signal(SIGALRM, resend_packets);
+    timer.it_interval.tv_sec = delay / 1000;    // sets an interval of the timer
+    timer.it_interval.tv_usec = (delay % 1000) * 1000;  
+    timer.it_value.tv_sec = delay / 1000;       // sets an initial value
+    timer.it_value.tv_usec = (delay % 1000) * 1000;
+
+    sigemptyset(&sigmask);
+    sigaddset(&sigmask, SIGALRM);
+}
+
+void resend_packets(int sig){
+    if (sig == SIGALRM)
+    {
+        //Resend all packets range between 
+        //sendBase and nextSeqNum
+        VLOG(INFO, "Timeout happend");
+        rto = rto * 2;
+        rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
+        rto = MAX(rto, MIN_RTO);
+
+        int curr = send_base_index;
+        while(curr<next_seqno_index){
+            if(sendto(sockfd, PACKET_BUFFER[curr%window_size], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%window_size]), 0, 
+                ( const struct sockaddr *)&serveraddr, serverlen) < 0){
+                error("sendto");
+            }
+            //start timer if not already active
+            if (!timer_active){
+                init_timer(rto, resend_packets);
+                start_timer();
+                //get time when starting transmission
+                gettimeofday(&transmission_startTime, NULL);
+                timer_active=1;
+            }
+            curr+=1;
+        }
+        
+    }
+}
+
+void reset_timer_rtt(){
+    sampleRTT = ((double) transmission_endTime.tv_sec - (double) transmission_startTime.tv_sec)*1000 + ((double) transmission_endTime.tv_usec - (double) transmission_startTime.tv_usec)/1000;
+    estimatedRTT = MAX(((1.0 - (double) ALPHA) * estimatedRTT + (double) ALPHA * sampleRTT), 1.0);
+    devRTT = MAX(((1.0 - (double) BETA) * devRTT + (double) BETA * abs(estimatedRTT - sampleRTT)), 1.0);
+    rto = MAX(floor(estimatedRTT + 4 * devRTT), 1);
+    
+    rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
+    rto = MAX(rto, MIN_RTO);
+
+    init_timer(rto, resend_packets);
 }
