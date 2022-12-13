@@ -20,6 +20,7 @@
 #define STDIN_FD    0
 #define RETRY  120 //millisecond
 #define PACKET_BUFFER_SIZE 10
+#define TRANSMISSION_END_INCREMENT 1
 #define ALPHA 0.125 //for estimatedRTT calculation
 #define BETA 0.25 //for devRTT calculation
 //RTO bounds
@@ -170,7 +171,7 @@ int main (int argc, char **argv)
                             ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
-            next_seqno = next_seqno + len;
+            next_seqno = next_seqno + TRANSMISSION_END_INCREMENT;
             next_seqno_index +=1;
             //wait for end of file signal ACK, else need to retransmit
             if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
