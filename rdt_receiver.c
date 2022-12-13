@@ -13,8 +13,6 @@
 #include "common.h"
 #include "packet.h"
 
-#define PACKET_BUFFER_SIZE 10
-
 #define TRANSMISSION_END_INCREMENT 1
 
 tcp_packet *recvpkt;

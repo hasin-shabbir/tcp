@@ -10,6 +10,8 @@ extern int verbose;
 #define DEBUG   0x100
 #define ALL     0x111
 
+#define PACKET_BUFFER_SIZE 64
+
 #define VLOG(level, ... ) \
     if(level & verbose) { \
         fprintf(stderr, ##__VA_ARGS__ );\
