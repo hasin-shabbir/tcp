@@ -21,6 +21,7 @@
 #define RETRY  120 //millisecond
 #define PACKET_BUFFER_SIZE 10
 #define TRANSMISSION_END_INCREMENT 1
+#define SIG_REPEAT 99
 #define ALPHA 0.125 //for estimatedRTT calculation
 #define BETA 0.25 //for devRTT calculation
 //RTO bounds
@@ -34,6 +35,7 @@ int send_base_index=0; //corresponding discrete index
 int file_end_seqno = -1; //seq number of last packet of data
 int window_size = 10;
 int timer_active = 0; //bool indicator
+int duplicate_ACK_count = 0;
 
 
 tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE];
@@ -157,6 +159,17 @@ int main (int argc, char **argv)
         }
         recvpkt = (tcp_packet *)buffer;
         //get acknowledged pack base and index
+        if (recvpkt->hdr.ackno==send_base){
+            duplicate_ACK_count += 1;
+        }
+        else{
+            duplicate_ACK_count = 0;
+        }
+        if (duplicate_ACK_count==2){
+            duplicate_ACK_count = 0;
+            resend_packets(SIG_REPEAT);
+        }
+
         send_base = recvpkt->hdr.ackno;
         send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
         //if last expected ACK, send EOF packet
@@ -248,7 +261,35 @@ void resend_packets(int sig){
     {
         //Resend all packets range between 
         //sendBase and nextSeqNum
-        VLOG(INFO, "Timeout happend");
+        VLOG(INFO, "Timeout happened");
+        // rto = rto * 2;
+        // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
+        // rto = MAX(rto, MIN_RTO);
+
+        int curr = send_base_index;
+        while(curr<next_seqno_index){
+            if(sendto(sockfd, PACKET_BUFFER[curr%window_size], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%window_size]), 0, 
+                ( const struct sockaddr *)&serveraddr, serverlen) < 0){
+                error("sendto");
+            }
+            //start timer if not already active
+            if (!timer_active){
+                init_timer(rto, resend_packets);
+                start_timer();
+                //get time when starting transmission
+                gettimeofday(&transmission_startTime, NULL);
+                timer_active=1;
+            }
+            curr+=1;
+        }
+        
+    }
+
+    if (sig == SIG_REPEAT)
+    {
+        //Resend all packets range between 
+        //sendBase and nextSeqNum
+        VLOG(INFO, "3 Duplicate ACKs received");
         // rto = rto * 2;
         // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
         // rto = MAX(rto, MIN_RTO);
