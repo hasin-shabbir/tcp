@@ -159,21 +159,26 @@ int main (int argc, char **argv)
         }
         recvpkt = (tcp_packet *)buffer;
         //get acknowledged pack base and index
+
         if (recvpkt->hdr.ackno==send_base){
             duplicate_ACK_count += 1;
         }
         else{
             duplicate_ACK_count = 0;
         }
-        if (duplicate_ACK_count==2){
+        if (duplicate_ACK_count==2 && !file_end){
             duplicate_ACK_count = 0;
+            stop_timer();
+            timer_active = 0;
             resend_packets(SIG_REPEAT);
+            continue;
         }
 
         send_base = recvpkt->hdr.ackno;
         send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
         //if last expected ACK, send EOF packet
         if (send_base==file_end_seqno){
+            printf("YUSRA IS A LOSER\n");
             sndpkt = make_packet(0);
             sndpkt->hdr.seqno = next_seqno;
             if(PACKET_BUFFER[next_seqno_index%window_size]!=NULL){
@@ -187,13 +192,20 @@ int main (int argc, char **argv)
             next_seqno = next_seqno + TRANSMISSION_END_INCREMENT;
             next_seqno_index +=1;
             //wait for end of file signal ACK, else need to retransmit
+
+
             if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
                 error("recvfrom");
             }
+
             recvpkt = (tcp_packet *)buffer;
-            if (recvpkt->hdr.ackno==next_seqno){
-                break;
+            while (recvpkt->hdr.ackno!=next_seqno){
+                if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
+                    error("recvfrom");
+                }
+                recvpkt = (tcp_packet *)buffer;
             }
+            break;
         }
         //if send_base at next_seqno, stop timer
         if(send_base==next_seqno){
@@ -285,7 +297,7 @@ void resend_packets(int sig){
         
     }
 
-    if (sig == SIG_REPEAT)
+    else if (sig == SIG_REPEAT)
     {
         //Resend all packets range between 
         //sendBase and nextSeqNum
