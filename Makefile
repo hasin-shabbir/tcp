@@ -14,7 +14,7 @@ LFLAGS   = -Wall
 OBJDIR = ../obj
 
 CLIENT_OBJECTS := $(OBJDIR)/rdt_sender.o $(OBJDIR)/common.o $(OBJDIR)/packet.o -lm
-SERVER_OBJECTS := $(OBJDIR)/rdt_receiver.o $(OBJDIR)/common.o $(OBJDIR)/packet.o
+SERVER_OBJECTS := $(OBJDIR)/rdt_receiver.o $(OBJDIR)/common.o $(OBJDIR)/packet.o -lm
 
 #Program name
 CLIENT := $(OBJDIR)/rdt_sender
