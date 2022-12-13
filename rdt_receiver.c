@@ -112,16 +112,11 @@ int main(int argc, char **argv) {
          * sendto: ACK back to the client 
          */
         gettimeofday(&tp, NULL);
-        // VLOG(DEBUG, "%lu, %d, %d", tp.tv_sec, recvpkt->hdr.data_size, recvpkt->hdr.seqno);
+        VLOG(DEBUG, "%lu, %d, %d", tp.tv_sec, recvpkt->hdr.data_size, recvpkt->hdr.seqno);
 
         //if in-order packet recvd, write the packet to file and send acknowledgement
         if (recvpkt->hdr.seqno == next_seqno) {
-            printf("writing at: %d\n", recvpkt->hdr.seqno );
             
-            char subbuff[8];
-            memcpy(subbuff,&(recvpkt->data[0]),7);
-            subbuff[7]='\0';
-            printf("data start: %s\n-------------------\n",subbuff);
             fseek(fp,0, SEEK_SET);    
             fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
             fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);
@@ -138,22 +133,10 @@ int main(int argc, char **argv) {
 
             int i = ceil((float)next_seqno/(float)DATA_SIZE);
             i = i%PACKET_BUFFER_SIZE;
-            if (PACKET_BUFFER[i]!=NULL){
-                PACKET_BUFFER[i]->hdr.seqno = PACKET_BUFFER[i]->hdr.seqno + PACKET_BUFFER[i]->hdr.data_size;
-            }
 
             while (PACKET_BUFFER[i]!=NULL && PACKET_BUFFER[i]->hdr.seqno==next_seqno){
                 fseek(fp,0, SEEK_SET);
                 fseek(fp, PACKET_BUFFER[i]->hdr.seqno, SEEK_SET);
-                printf("writing lost at: %d | %d\n",i, PACKET_BUFFER[i]->hdr.seqno );
-
-                /*DEBUG*/
-                char subbuff[8];
-                memcpy(subbuff,&(PACKET_BUFFER[i]->data[0]),7);
-                subbuff[7]='\0';
-                printf("data start: \n%s\n-------------------\n",subbuff);
-                /*END DEBUG*/
-
                 fwrite(PACKET_BUFFER[i]->data, 1, PACKET_BUFFER[i]->hdr.data_size, fp);
 
                 next_seqno += PACKET_BUFFER[i]->hdr.data_size;
@@ -164,9 +147,6 @@ int main(int argc, char **argv) {
                 PACKET_BUFFER[i] = NULL;
                 i = ceil((float)next_seqno/(float)DATA_SIZE);
                 i = i%PACKET_BUFFER_SIZE;
-                if (PACKET_BUFFER[i]!=NULL){
-                    PACKET_BUFFER[i]->hdr.seqno = PACKET_BUFFER[i]->hdr.seqno + PACKET_BUFFER[i]->hdr.data_size;
-                }
             }
             if (next_seqno != last_ackno) {
                 if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
@@ -188,9 +168,12 @@ int main(int argc, char **argv) {
             }
             int j = ceil((float)recvpkt->hdr.seqno/(float)DATA_SIZE);
             j = j%PACKET_BUFFER_SIZE;
+
             if(PACKET_BUFFER[j]==NULL && recvpkt->hdr.seqno>next_seqno){
-                PACKET_BUFFER[j]=recvpkt;
+                PACKET_BUFFER[j]=make_packet(recvpkt->hdr.data_size);
                 PACKET_BUFFER[j]->hdr.seqno=recvpkt->hdr.seqno;
+                PACKET_BUFFER[j]->hdr.data_size = recvpkt->hdr.data_size;
+                strncpy(PACKET_BUFFER[j]->data,recvpkt->data,recvpkt->hdr.data_size);
             }
         }
 
