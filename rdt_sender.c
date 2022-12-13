@@ -65,6 +65,7 @@ void stop_timer();
 void resend_packets(int);
 void init_timer(int delay, void (*sig_handler)(int));
 void reset_timer_rtt();
+void logger();
 
 int main (int argc, char **argv)
 {
@@ -165,6 +166,7 @@ int main (int argc, char **argv)
         //get acknowledged pack base and index
         if (slow_start){
             cwnd+=1.0;
+            logger();
             if (cwnd==ssthresh){
                 slow_start = 0;
                 congestion_avoidance = 1;
@@ -172,6 +174,7 @@ int main (int argc, char **argv)
         }
         else if (congestion_avoidance){
             cwnd+=1/cwnd;
+            logger();
         }
 
         if (recvpkt->hdr.ackno==send_base){
@@ -313,7 +316,8 @@ void resend_packets(int sig){
         congestion_avoidance = 0;
         slow_start = 1;
         cwnd = 1.0;
-        
+        logger();
+
     }
 
     else if (sig == SIG_REPEAT)
@@ -345,6 +349,8 @@ void resend_packets(int sig){
         congestion_avoidance = 0;
         slow_start = 1;
         cwnd = 1.0;
+        logger();
+
     }
 }
 
@@ -358,4 +364,16 @@ void reset_timer_rtt(){
     rto = MAX(rto, MIN_RTO);
 
     init_timer(rto, resend_packets);
+}
+
+void logger(){
+    struct timeval presentTime;
+    gettimeofday(&presentTime, NULL);
+    FILE *log_file = fopen("log.csv","a");
+    if (log_file==NULL){
+        error("failed to open log file\n");
+    }
+    fprintf(log_file, "%.6f,%.2f\n", (double)presentTime.tv_sec+(double)presentTime.tv_usec/1000000, cwnd);
+
+    fclose(log_file);
 }
