@@ -133,7 +133,7 @@ int main(int argc, char **argv) {
 
             int i = ceil((float)next_seqno/(float)DATA_SIZE);
             i = i%PACKET_BUFFER_SIZE;
-
+            
             while (PACKET_BUFFER[i]!=NULL && PACKET_BUFFER[i]->hdr.seqno==next_seqno){
                 fseek(fp,0, SEEK_SET);
                 fseek(fp, PACKET_BUFFER[i]->hdr.seqno, SEEK_SET);
@@ -143,7 +143,7 @@ int main(int argc, char **argv) {
                 sndpkt = make_packet(0);
                 sndpkt->hdr.ackno = PACKET_BUFFER[i]->hdr.seqno + PACKET_BUFFER[i]->hdr.data_size;
                 sndpkt->hdr.ctr_flags = ACK;
-                
+
                 PACKET_BUFFER[i] = NULL;
                 i = ceil((float)next_seqno/(float)DATA_SIZE);
                 i = i%PACKET_BUFFER_SIZE;

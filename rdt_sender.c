@@ -176,7 +176,10 @@ int main (int argc, char **argv)
             if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
                 error("recvfrom");
             }
-            break;
+            recvpkt = (tcp_packet *)buffer;
+            if (recvpkt->hdr.ackno==next_seqno){
+                break;
+            }
         }
         //if send_base at next_seqno, stop timer
         if(send_base==next_seqno){
@@ -245,9 +248,9 @@ void resend_packets(int sig){
         //Resend all packets range between 
         //sendBase and nextSeqNum
         VLOG(INFO, "Timeout happend");
-        rto = rto * 2;
-        rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
-        rto = MAX(rto, MIN_RTO);
+        // rto = rto * 2;
+        // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
+        // rto = MAX(rto, MIN_RTO);
 
         int curr = send_base_index;
         while(curr<next_seqno_index){
