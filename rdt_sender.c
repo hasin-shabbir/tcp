@@ -19,7 +19,6 @@
 
 #define STDIN_FD    0
 #define RETRY  120 //millisecond
-#define PACKET_BUFFER_SIZE 10
 #define TRANSMISSION_END_INCREMENT 1
 #define SIG_REPEAT 99
 #define ALPHA 0.125 //for estimatedRTT calculation
@@ -27,6 +26,7 @@
 //RTO bounds
 #define MAX_RTO 2500  
 #define MIN_RTO 100
+#define INIT_SSTRESH 64
 
 int next_seqno=0; //bytes-based
 int next_seqno_index = 0; //corresponding discrete index
@@ -37,6 +37,10 @@ int window_size = 10;
 int timer_active = 0; //bool indicator
 int duplicate_ACK_count = 0;
 
+float cwnd = 1.0;
+int ssthresh = INIT_SSTRESH;
+int slow_start = 1;
+int congestion_avoidance = 0;
 
 tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE];
 
@@ -112,7 +116,7 @@ int main (int argc, char **argv)
     while (1)
     {
         //while space for more packets and not EOF, send packets
-        while (next_seqno_index<send_base_index+window_size && !file_end){
+        while (next_seqno_index<send_base_index+(int)cwnd && !file_end){
             len = fread(buffer, 1, DATA_SIZE, fp);
             if ( len <= 0){
                 //if EOF, set flag and store seq num of last sent packet
@@ -129,10 +133,10 @@ int main (int argc, char **argv)
                 sndpkt->hdr.seqno = next_seqno;
 
                 //store packet into buffer
-                if(PACKET_BUFFER[next_seqno_index%window_size]!=NULL){
-                    free(PACKET_BUFFER[next_seqno_index%window_size]);
+                if(PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]!=NULL){
+                    free(PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]);
                 }
-                PACKET_BUFFER[next_seqno_index%window_size]=sndpkt;
+                PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]=sndpkt;
 
                 //send packet
                 if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, 
@@ -159,6 +163,16 @@ int main (int argc, char **argv)
         }
         recvpkt = (tcp_packet *)buffer;
         //get acknowledged pack base and index
+        if (slow_start){
+            cwnd+=1.0;
+            if (cwnd==ssthresh){
+                slow_start = 0;
+                congestion_avoidance = 1;
+            }
+        }
+        else if (congestion_avoidance){
+            cwnd+=1/cwnd;
+        }
 
         if (recvpkt->hdr.ackno==send_base){
             duplicate_ACK_count += 1;
@@ -170,7 +184,9 @@ int main (int argc, char **argv)
             duplicate_ACK_count = 0;
             stop_timer();
             timer_active = 0;
+            
             resend_packets(SIG_REPEAT);
+
             continue;
         }
 
@@ -180,10 +196,10 @@ int main (int argc, char **argv)
         if (send_base==file_end_seqno){
             sndpkt = make_packet(0);
             sndpkt->hdr.seqno = next_seqno;
-            if(PACKET_BUFFER[next_seqno_index%window_size]!=NULL){
-                free(PACKET_BUFFER[next_seqno_index%window_size]);
+            if(PACKET_BUFFER[next_seqno_index%PACKET_BUFFER_SIZE]!=NULL){
+                free(PACKET_BUFFER[next_seqno_index%PACKET_BUFFER_SIZE]);
             }
-            PACKET_BUFFER[next_seqno_index%window_size]=sndpkt;
+            PACKET_BUFFER[next_seqno_index%PACKET_BUFFER_SIZE]=sndpkt;
             if(sendto(sockfd, sndpkt, TCP_HDR_SIZE + get_data_size(sndpkt), 0, 
                             ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
@@ -279,7 +295,7 @@ void resend_packets(int sig){
 
         int curr = send_base_index;
         while(curr<next_seqno_index){
-            if(sendto(sockfd, PACKET_BUFFER[curr%window_size], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%window_size]), 0, 
+            if(sendto(sockfd, PACKET_BUFFER[curr%PACKET_BUFFER_SIZE], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
@@ -293,6 +309,10 @@ void resend_packets(int sig){
             }
             curr+=1;
         }
+        ssthresh = MAX(cwnd/2,2);
+        congestion_avoidance = 0;
+        slow_start = 1;
+        cwnd = 1.0;
         
     }
 
@@ -307,7 +327,7 @@ void resend_packets(int sig){
 
         int curr = send_base_index;
         while(curr<next_seqno_index){
-            if(sendto(sockfd, PACKET_BUFFER[curr%window_size], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%window_size]), 0, 
+            if(sendto(sockfd, PACKET_BUFFER[curr%PACKET_BUFFER_SIZE], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
@@ -321,7 +341,10 @@ void resend_packets(int sig){
             }
             curr+=1;
         }
-        
+        ssthresh = MAX(cwnd/2,2);
+        congestion_avoidance = 0;
+        slow_start = 1;
+        cwnd = 1.0;
     }
 }
 
