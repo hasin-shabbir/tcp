@@ -178,7 +178,6 @@ int main (int argc, char **argv)
         send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
         //if last expected ACK, send EOF packet
         if (send_base==file_end_seqno){
-            printf("YUSRA IS A LOSER\n");
             sndpkt = make_packet(0);
             sndpkt->hdr.seqno = next_seqno;
             if(PACKET_BUFFER[next_seqno_index%window_size]!=NULL){
