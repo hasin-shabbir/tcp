@@ -146,6 +146,7 @@ int main(int argc, char **argv) {
                 sndpkt = make_packet(0);
                 sndpkt->hdr.ackno = buff_lastDataSize == 0 ? PACKET_BUFFER[i]->hdr.seqno + TRANSMISSION_END_INCREMENT : PACKET_BUFFER[i]->hdr.seqno + PACKET_BUFFER[i]->hdr.data_size;
                 sndpkt->hdr.ctr_flags = ACK;
+                sndpkt->hdr.data_size = recvpkt->hdr.data_size;
 
                 PACKET_BUFFER[i] = NULL;
                 i = ceil((float)next_seqno/(float)DATA_SIZE);
@@ -171,11 +172,13 @@ int main(int argc, char **argv) {
             }
         }
         //if out of order packet recvd, send repeat ACK of previous in-order packet recvd
-        else if (recvpkt->hdr.seqno>next_seqno){
+        else{
             // printf("lost packet: %d\n",next_seqno);
             sndpkt = make_packet(0);
             sndpkt->hdr.ackno = last_ackno;
             sndpkt->hdr.ctr_flags = ACK;
+            sndpkt->hdr.data_size = recvpkt->hdr.data_size;
+            
             if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
                     (struct sockaddr *) &clientaddr, clientlen) < 0) {
                 error("ERROR in sendto");
@@ -183,7 +186,7 @@ int main(int argc, char **argv) {
             int j = ceil((float)recvpkt->hdr.seqno/(float)DATA_SIZE);
             j = j%PACKET_BUFFER_SIZE;
 
-            if(PACKET_BUFFER[j]==NULL){
+            if(PACKET_BUFFER[j]==NULL && recvpkt->hdr.seqno>next_seqno){
                 PACKET_BUFFER[j]=make_packet(recvpkt->hdr.data_size);
                 PACKET_BUFFER[j]->hdr.seqno=recvpkt->hdr.seqno;
                 PACKET_BUFFER[j]->hdr.data_size = recvpkt->hdr.data_size;

@@ -87,7 +87,7 @@ int main (int argc, char **argv)
 
     /* check command line arguments */
     if (argc != 4) {
-        fprintf(stderr,"usage: %s <hostname> <port> <FILE> <LOG_FILE>\n", argv[0]);
+        fprintf(stderr,"usage: %s <hostname> <port> <FILE>\n", argv[0]);
         exit(0);
     }
     hostname = argv[1];
@@ -198,13 +198,15 @@ int main (int argc, char **argv)
             logger_cwnd();
         }
 
+
+        logger_bytes(recvpkt->hdr.data_size);
+
         if (recvpkt->hdr.ackno==send_base){
             duplicate_ACK_count += 1;
         }
         else{
             duplicate_ACK_count = 0;
             // logger_bytes(recvpkt->hdr.ackno-send_base+TCP_HDR_SIZE*(ceil((float)recvpkt->hdr.ackno/(float)DATA_SIZE)-send_base_index));
-            logger_bytes(recvpkt->hdr.ackno-send_base);
         }
         if (duplicate_ACK_count==2 && !file_end){
             duplicate_ACK_count = 0;

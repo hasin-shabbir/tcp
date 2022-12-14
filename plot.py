@@ -47,7 +47,7 @@ throughputDL = []
 timeDL = []
 
 traceDL = open (args.dir+"/"+str(args.name), 'r')
-traceDL.readline()
+# traceDL.readline()
 
 tmp = traceDL.readline().strip().split(",")
 bytes = int(float(tmp[1]))
