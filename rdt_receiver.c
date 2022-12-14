@@ -121,13 +121,15 @@ int main(int argc, char **argv) {
             fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
             fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);
             
-            sndpkt = make_packet(0);
-            sndpkt->hdr.ackno = recvpkt->hdr.seqno + recvpkt->hdr.data_size;
-            sndpkt->hdr.ctr_flags = ACK;
-            if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
-                    (struct sockaddr *) &clientaddr, clientlen) < 0) {
-                error("ERROR in sendto");
-            }
+            // sndpkt = make_packet(0);
+            // sndpkt->hdr.ackno = recvpkt->hdr.seqno + recvpkt->hdr.data_size;
+            // sndpkt->hdr.ctr_flags = ACK;
+            // sndpkt->hdr.data_size = recvpkt->hdr.data_size;
+
+            // if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
+            //         (struct sockaddr *) &clientaddr, clientlen) < 0) {
+            //     error("ERROR in sendto");
+            // }
             last_ackno = next_seqno + recvpkt->hdr.data_size;
             next_seqno += recvpkt->hdr.data_size;
 
@@ -145,14 +147,16 @@ int main(int argc, char **argv) {
 
                 sndpkt = make_packet(0);
                 sndpkt->hdr.ackno = buff_lastDataSize == 0 ? PACKET_BUFFER[i]->hdr.seqno + TRANSMISSION_END_INCREMENT : PACKET_BUFFER[i]->hdr.seqno + PACKET_BUFFER[i]->hdr.data_size;
-                sndpkt->hdr.ctr_flags = ACK;
-                sndpkt->hdr.data_size = recvpkt->hdr.data_size;
+                
 
                 PACKET_BUFFER[i] = NULL;
                 i = ceil((float)next_seqno/(float)DATA_SIZE);
                 i = i%PACKET_BUFFER_SIZE;
             }
             if (next_seqno != last_ackno && buff_lastDataSize!=0) {
+                sndpkt->hdr.ctr_flags = ACK;
+                sndpkt->hdr.data_size = recvpkt->hdr.data_size;
+                
                 if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
                         (struct sockaddr *) &clientaddr, clientlen) < 0) {
                     error("ERROR in sendto");
@@ -160,6 +164,9 @@ int main(int argc, char **argv) {
                 last_ackno = sndpkt->hdr.ackno;
             }
             if (buff_lastDataSize==0){
+                sndpkt->hdr.ctr_flags = ACK;
+                // sndpkt->hdr.data_size = recvpkt->hdr.data_size;
+
                 VLOG(INFO, "End Of File has been reached");
                 fclose(fp);
                 if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
