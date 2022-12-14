@@ -59,8 +59,8 @@ tcp_packet *sndpkt;
 tcp_packet *recvpkt;
 sigset_t sigmask;     
 
-char* logCWND_filename = "log_cwnd.csv";
-char* logBytes_filename = "log_bytes.csv";  
+#define logCWND_filename "log_cwnd.csv";
+#define logBytes_filename "log_bytes.csv";  
 
 
 
