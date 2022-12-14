@@ -50,17 +50,17 @@ traceDL = open (args.dir+"/"+str(args.name), 'r')
 traceDL.readline()
 
 tmp = traceDL.readline().strip().split(",")
-bytes = int(tmp[1])
+bytes = int(float(tmp[1]))
 startTime = float(tmp[0])
 stime=float(startTime)
 
 for time in traceDL:
     if (float(time.strip().split(",")[0]) - float(startTime)) <= 1.0:
-        bytes += int(time.strip().split(",")[1])
+        bytes += int(float(time.strip().split(",")[1]))
     else:
         throughputDL.append(bytes*8/1000000.0)
         timeDL.append(float(startTime)-stime)
-        bytes = int(time.strip().split(",")[1])
+        bytes = int(float(time.strip().split(",")[1]))
         startTime += 1.0
 
 print (timeDL)
