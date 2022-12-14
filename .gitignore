@@ -1,3 +1,5 @@
 temp_sender.c
 temp_rcv.c
 hello*.txt
+*.csv
+*.pdf
