@@ -59,7 +59,9 @@ tcp_packet *sndpkt;
 tcp_packet *recvpkt;
 sigset_t sigmask;     
 
-char* logfilename = "";  
+char* logCWND_filename = "log_cwnd.csv";
+char* logBytes_filename = "log_bytes.csv";  
+
 
 
 void start_timer();
@@ -67,11 +69,15 @@ void stop_timer();
 void resend_packets(int);
 void init_timer(int delay, void (*sig_handler)(int));
 void reset_timer_rtt();
-void logger();
-void reset_logger();
+void logger_cwnd();
+void reset_logger_cwnd();
+void logger_bytes(int);
+void reset_logger_bytes();
 
 int main (int argc, char **argv)
 {
+
+    int first_transmission = 1;
 
     int portno, len;
     int next_seqno;
@@ -80,7 +86,7 @@ int main (int argc, char **argv)
     FILE *fp;
 
     /* check command line arguments */
-    if (argc != 5) {
+    if (argc != 4) {
         fprintf(stderr,"usage: %s <hostname> <port> <FILE> <LOG_FILE>\n", argv[0]);
         exit(0);
     }
@@ -90,12 +96,10 @@ int main (int argc, char **argv)
     if (fp == NULL) {
         error(argv[3]);
     }
-    // printf("here\n");
-    logfilename = argv[4];
-    // strncpy(logfilename,argv[4],strlen(argv[4]));
-    // printf("%s\n",logfilename);
 
-    reset_logger();
+    reset_logger_cwnd();
+    reset_logger_bytes();
+
 
     /* socket: create the socket */
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -154,6 +158,10 @@ int main (int argc, char **argv)
                             ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                     error("sendto");
                 }
+                if (first_transmission){
+                    first_transmission=0;
+                    logger_bytes(0);
+                }
                 
                 //start timer if not active (oldest unacked packet in flight)
                 if(!timer_active){
@@ -178,7 +186,7 @@ int main (int argc, char **argv)
             printf("[SLOW START]\n");
 
             cwnd+=1.0;
-            logger();
+            logger_cwnd();
             if ((int)cwnd==ssthresh){
                 slow_start = 0;
                 congestion_avoidance = 1;
@@ -187,7 +195,7 @@ int main (int argc, char **argv)
         else if (congestion_avoidance){
             printf("[CONGESTION AVOIDANCE]\n");
             cwnd+=1.0/cwnd;
-            logger();
+            logger_cwnd();
         }
 
         if (recvpkt->hdr.ackno==send_base){
@@ -195,6 +203,8 @@ int main (int argc, char **argv)
         }
         else{
             duplicate_ACK_count = 0;
+            // logger_bytes(recvpkt->hdr.ackno-send_base+TCP_HDR_SIZE*(ceil((float)recvpkt->hdr.ackno/(float)DATA_SIZE)-send_base_index));
+            logger_bytes(recvpkt->hdr.ackno-send_base);
         }
         if (duplicate_ACK_count==2 && !file_end){
             duplicate_ACK_count = 0;
@@ -330,7 +340,7 @@ void resend_packets(int sig){
         congestion_avoidance = 0;
         slow_start = 1;
         cwnd = 1.0;
-        logger();
+        logger_cwnd();
 
     }
 
@@ -364,7 +374,7 @@ void resend_packets(int sig){
         congestion_avoidance = 0;
         slow_start = 1;
         cwnd = 1.0;
-        logger();
+        logger_cwnd();
 
     }
 }
@@ -381,10 +391,10 @@ void reset_timer_rtt(){
     init_timer(rto, resend_packets);
 }
 
-void logger(){
+void logger_cwnd(){
     struct timeval presentTime;
     gettimeofday(&presentTime, NULL);
-    FILE *log_file = fopen(logfilename,"a");
+    FILE *log_file = fopen(logCWND_filename,"a");
     if (log_file==NULL){
         error("failed to open log file\n");
     }
@@ -393,7 +403,24 @@ void logger(){
     fclose(log_file);
 }
 
-void reset_logger(){
-    FILE *log_file = fopen(logfilename,"w");
+void reset_logger_cwnd(){
+    FILE *log_file = fopen(logCWND_filename,"w");
+    fclose(log_file);
+}
+
+void logger_bytes(int bytes){
+    struct timeval presentTime;
+    gettimeofday(&presentTime, NULL);
+    FILE *log_file = fopen(logBytes_filename,"a");
+    if (log_file==NULL){
+        error("failed to open log file\n");
+    }
+    fprintf(log_file, "%.6f,%d\n", (double)presentTime.tv_sec+(double)presentTime.tv_usec/1000000, bytes);
+
+    fclose(log_file);
+}
+
+void reset_logger_bytes(){
+    FILE *log_file = fopen(logBytes_filename,"w");
     fclose(log_file);
 }
