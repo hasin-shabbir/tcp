@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
             }
         }
         //if out of order packet recvd, send repeat ACK of previous in-order packet recvd
-        else {
+        else if (recvpkt->hdr.seqno>next_seqno){
             // printf("lost packet: %d\n",next_seqno);
             sndpkt = make_packet(0);
             sndpkt->hdr.ackno = last_ackno;
@@ -183,7 +183,7 @@ int main(int argc, char **argv) {
             int j = ceil((float)recvpkt->hdr.seqno/(float)DATA_SIZE);
             j = j%PACKET_BUFFER_SIZE;
 
-            if(PACKET_BUFFER[j]==NULL && recvpkt->hdr.seqno>next_seqno){
+            if(PACKET_BUFFER[j]==NULL){
                 PACKET_BUFFER[j]=make_packet(recvpkt->hdr.data_size);
                 PACKET_BUFFER[j]->hdr.seqno=recvpkt->hdr.seqno;
                 PACKET_BUFFER[j]->hdr.data_size = recvpkt->hdr.data_size;

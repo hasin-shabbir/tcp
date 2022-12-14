@@ -15,7 +15,7 @@ args = parser.parse_args()
 
 # Parse the data from a csv file.
 # Replace "data.csv" with the path to your csv file.
-with open(parser.path) as f:
+with open(args.path) as f:
     data = []
     for line in f:
         data.append(line.strip().split(","))
@@ -35,4 +35,4 @@ plt.xlabel("Time")
 plt.ylabel("CWND")
 plt.grid(True, which="both")
 
-plt.savefig(args.name,dpi=1000,bbox_inches='tight')
+plt.savefig(args.name+'.pdf',dpi=1000,bbox_inches='tight')
