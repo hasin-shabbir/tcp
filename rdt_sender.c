@@ -307,6 +307,12 @@ void resend_packets(int sig){
         
         int count = 0;
         int curr = send_base_index;
+
+        ssthresh = MAX(cwnd/2,2);
+        congestion_avoidance = 0;
+        slow_start = 1;
+        cwnd = INIT_CWND;
+        logger_cwnd();
         
         if (DEBUG_MODE){
             printf("\ntimeout window: %d\n",(int)cwnd);
@@ -338,12 +344,6 @@ void resend_packets(int sig){
             printf("\n");
         }
 
-        ssthresh = MAX(cwnd/2,2);
-        congestion_avoidance = 0;
-        slow_start = 1;
-        cwnd = INIT_CWND;
-        logger_cwnd();
-
     }
 
     else if (sig == SIG_REPEAT)
@@ -354,6 +354,12 @@ void resend_packets(int sig){
         
         int count = 0;
         int curr = send_base_index;
+
+        ssthresh = MAX(cwnd/2,2);
+        congestion_avoidance = 0;
+        slow_start = 1;
+        cwnd = INIT_CWND;
+        logger_cwnd();
 
         if (DEBUG_MODE){
             printf("\nresend window: %d\n",(int)cwnd);
@@ -383,11 +389,6 @@ void resend_packets(int sig){
         if (DEBUG_MODE){
             printf("\n");
         }
-        ssthresh = MAX(cwnd/2,2);
-        congestion_avoidance = 0;
-        slow_start = 1;
-        cwnd = INIT_CWND;
-        logger_cwnd();
 
     }
 }
