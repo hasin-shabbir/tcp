@@ -303,10 +303,8 @@ void resend_packets(int sig){
     {
         //Resend all packets range between 
         //sendBase and nextSeqNum
-        // VLOG(INFO, "Timeout happened");
-        // rto = rto * 2;
-        // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
-        // rto = MAX(rto, MIN_RTO);
+        VLOG(INFO, "Timeout happened");
+        
         int count = 0;
         int curr = send_base_index;
         
@@ -352,10 +350,8 @@ void resend_packets(int sig){
     {
         //Resend all packets range between 
         //sendBase and nextSeqNum
-        // VLOG(INFO, "3 Duplicate ACKs received");
-        // rto = rto * 2;
-        // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
-        // rto = MAX(rto, MIN_RTO);
+        VLOG(INFO, "3 Duplicate ACKs received");
+        
         int count = 0;
         int curr = send_base_index;
 

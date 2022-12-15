@@ -114,7 +114,7 @@ int main(int argc, char **argv) {
          * sendto: ACK back to the client 
          */
         gettimeofday(&tp, NULL);
-        // VLOG(DEBUG, "%lu, %d, %d", tp.tv_sec, recvpkt->hdr.data_size, recvpkt->hdr.seqno);
+        VLOG(DEBUG, "%lu, %d, %d", tp.tv_sec, recvpkt->hdr.data_size, recvpkt->hdr.seqno);
 
         //if in-order packet recvd, write the packet to file and send acknowledgement
         if (recvpkt->hdr.seqno == next_seqno) {
