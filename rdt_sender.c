@@ -36,7 +36,6 @@ int next_seqno_index = 0; //corresponding discrete index
 int send_base=0; //bytes-based
 int send_base_index=0; //corresponding discrete index
 int file_end_seqno = -1; //seq number of last packet of data
-int file_end = 0;
 int window_size = 10;
 int timer_active = 0; //bool indicator
 int duplicate_ACK_count = 0;
@@ -73,13 +72,12 @@ void reset_timer_rtt();
 void logger_cwnd();
 void reset_logger_cwnd();
 
-char buffer[DATA_SIZE];
-FILE *fp;
-
 int main (int argc, char **argv){
     int portno, len;
     int next_seqno;
     char *hostname;
+    char buffer[DATA_SIZE];
+    FILE *fp;
 
     /* check command line arguments */
     if (argc != 4) {
@@ -121,6 +119,7 @@ int main (int argc, char **argv){
 
     init_timer(rto, resend_packets);
     next_seqno = 0;
+    int file_end = 0;
     while (1)
     {
         //while space for more packets and not EOF, send packets
@@ -335,42 +334,6 @@ void resend_packets(int sig){
             curr+=1;
             count+=1;
         }
-
-        while(count<(int)cwnd){
-            int len = fread(buffer, 1, DATA_SIZE, fp);
-            if ( len <= 0){
-                //if EOF, set flag and store seq num of last sent packet
-                VLOG(INFO, "End Of File has been reached");
-                file_end = 1;
-                file_end_seqno = next_seqno;
-                break;
-            }
-            else{
-                //make packet
-                sndpkt = make_packet(len);
-                memcpy(sndpkt->data, buffer, len);
-                //store seq no.
-                sndpkt->hdr.seqno = next_seqno;
-
-                //store packet into buffer
-                if(PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]!=NULL){
-                    free(PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]);
-                }
-                PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]=sndpkt;
-
-                if(!timer_active){
-                    start_timer();
-                    //get time when starting transmission
-                    gettimeofday(&transmission_startTime, NULL);
-                    timer_active=1;
-                }
-                // increment seq no.
-                next_seqno = next_seqno + len;
-                next_seqno_index +=1;
-            }
-            count++;
-        }
-
         if (DEBUG_MODE){
             printf("\n");
         }
@@ -417,42 +380,6 @@ void resend_packets(int sig){
             curr+=1;
             count+=1;
         }
-
-        while(count<(int)cwnd){
-            int len = fread(buffer, 1, DATA_SIZE, fp);
-            if ( len <= 0){
-                //if EOF, set flag and store seq num of last sent packet
-                VLOG(INFO, "End Of File has been reached");
-                file_end = 1;
-                file_end_seqno = next_seqno;
-                break;
-            }
-            else{
-                //make packet
-                sndpkt = make_packet(len);
-                memcpy(sndpkt->data, buffer, len);
-                //store seq no.
-                sndpkt->hdr.seqno = next_seqno;
-
-                //store packet into buffer
-                if(PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]!=NULL){
-                    free(PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]);
-                }
-                PACKET_BUFFER[next_seqno_index%(PACKET_BUFFER_SIZE)]=sndpkt;
-
-                if(!timer_active){
-                    start_timer();
-                    //get time when starting transmission
-                    gettimeofday(&transmission_startTime, NULL);
-                    timer_active=1;
-                }
-                // increment seq no.
-                next_seqno = next_seqno + len;
-                next_seqno_index +=1;
-            }
-            count++;
-        }
-
         if (DEBUG_MODE){
             printf("\n");
         }
