@@ -19,17 +19,14 @@
 
 #define DEBUG_MODE 0
 
-#define STDIN_FD    0
+#define STDIN_FD 0
 #define RETRY  120 //millisecond
 #define TRANSMISSION_END_INCREMENT 1
-#define SIG_REPEAT 99
+#define SIG_REPEAT 99 //signal of 3 repeated acks
 #define ALPHA 0.125 //for estimatedRTT calculation
 #define BETA 0.25 //for devRTT calculation
-//RTO bounds
-#define MAX_RTO 2500  
-#define MIN_RTO 100
-#define INIT_SSTRESH 64
-#define INIT_CWND 1.0f
+#define INIT_SSTRESH 64 //initial ssthresh
+#define INIT_CWND 1.0f //initial cwnd
 
 int next_seqno=0; //bytes-based
 int next_seqno_index = 0; //corresponding discrete index
@@ -38,39 +35,39 @@ int send_base_index=0; //corresponding discrete index
 int file_end_seqno = -1; //seq number of last packet of data
 int window_size = 10;
 int timer_active = 0; //bool indicator
-int duplicate_ACK_count = 0;
+int duplicate_ACK_count = 0; //count number of duplicate ACKs
 
-float cwnd = INIT_CWND;
-int ssthresh = INIT_SSTRESH;
-int slow_start = 1;
-int congestion_avoidance = 0;
+float cwnd = INIT_CWND; //congestion window
+int ssthresh = INIT_SSTRESH; //ssthresh
+int slow_start = 1; //indicator of slow start phase
+int congestion_avoidance = 0; //indicator of congestion avoidance phase
 
-tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE];
+tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE]; //buffer to store unacked packets
 
 int sockfd, serverlen;
 struct sockaddr_in serveraddr;
 
 struct itimerval timer; 
-struct timeval transmission_startTime, transmission_endTime;
+struct timeval transmission_startTime, transmission_endTime; //time when transmission started and when ACK received to calculate rto
 
-unsigned long rto = RETRY;
-double sampleRTT = 0.0;
-double estimatedRTT = 0.0;
-double devRTT = 0.0;
+unsigned long rto = RETRY; //rto time
+double sampleRTT = 0.0; //sample rtt
+double estimatedRTT = 0.0; //estimated rtt
+double devRTT = 0.0; //dev rtt
 
 tcp_packet *sndpkt;
 tcp_packet *recvpkt;
 sigset_t sigmask;     
 
-#define logCWND_filename "log_cwnd.csv"
+#define logCWND_filename "log_cwnd.csv" //file to store cwnd change logs
 
-void start_timer();
-void stop_timer();
-void resend_packets(int);
-void init_timer(int delay, void (*sig_handler)(int));
-void reset_timer_rtt();
-void logger_cwnd();
-void reset_logger_cwnd();
+void start_timer(); //method to start timer
+void stop_timer(); //method to store timer
+void resend_packets(int); //signal handler to resend packets
+void init_timer(int delay, void (*sig_handler)(int)); //initialize timer
+void reset_timer_rtt(); //reset timer on rtt recalculation
+void logger_cwnd(); //method to log cwnd to file
+void reset_logger_cwnd(); //method to reset cwnd logfile at start of program
 
 int main (int argc, char **argv){
     int portno, len;
@@ -91,6 +88,7 @@ int main (int argc, char **argv){
         error(argv[3]);
     }
 
+    //reset cwnd logfile at program start
     reset_logger_cwnd();
 
     /* socket: create the socket */
@@ -115,10 +113,12 @@ int main (int argc, char **argv){
 
     assert(MSS_SIZE - TCP_HDR_SIZE > 0);
 
-    //Stop and wait protocol
 
+    //initialize timer
     init_timer(rto, resend_packets);
+    //initialize next sequence number
     next_seqno = 0;
+    //indicator for end of file
     int file_end = 0;
     while (1)
     {
@@ -133,6 +133,7 @@ int main (int argc, char **argv){
                 break;
             }
             else{
+                //if not EOF
                 //make packet
                 sndpkt = make_packet(len);
                 memcpy(sndpkt->data, buffer, len);
@@ -155,6 +156,7 @@ int main (int argc, char **argv){
                     start_timer();
                     //get time when starting transmission
                     gettimeofday(&transmission_startTime, NULL);
+                    //indicate that timer is active
                     timer_active=1;
                 }
                 // increment seq no.
@@ -168,20 +170,24 @@ int main (int argc, char **argv){
                 error("recvfrom");
         }
         recvpkt = (tcp_packet *)buffer;
-        //get acknowledged pack base and index
+
+        //slow start mechanism
         if (slow_start){
             cwnd+=1.0;
-            logger_cwnd();
+            logger_cwnd(); //log cwnd
+            //change to congestion avoidance
             if ((int)cwnd==ssthresh){
                 slow_start = 0;
                 congestion_avoidance = 1;
             }
         }
+        //congestion avoidance
         else if (congestion_avoidance){
             cwnd+=1.0/cwnd;
-            logger_cwnd();
+            logger_cwnd(); //log cwnd
         }
 
+        //check if duplicate ACK
         if (recvpkt->hdr.ackno!=send_base){
             duplicate_ACK_count = 1;
         }
@@ -189,6 +195,7 @@ int main (int argc, char **argv){
             duplicate_ACK_count += 1;
         }
 
+        //if 3 duplicate ACKs, resend packets
         if (duplicate_ACK_count%3==0 && !file_end){
             stop_timer();
             timer_active = 0;
@@ -198,13 +205,10 @@ int main (int argc, char **argv){
             continue;
         }
 
+        //move sendbase according to the acknowledged packet
         send_base = recvpkt->hdr.ackno;
-        /*
-            if (duplicateACK==0){
-                prevAck = sendbase;
-            }
-        */
-        send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
+        send_base_index = ceil((float)send_base/(float)DATA_SIZE); //calculate index of sendbase
+
         //if last expected ACK, send EOF packet
         if (send_base==file_end_seqno){
             sndpkt = make_packet(0);
@@ -219,15 +223,14 @@ int main (int argc, char **argv){
             }
             next_seqno = next_seqno + TRANSMISSION_END_INCREMENT;
             next_seqno_index +=1;
+
             //wait for end of file signal ACK, else need to retransmit
-
-
             if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
                 error("recvfrom");
             }
 
+            //wait for EOF ACK
             recvpkt = (tcp_packet *)buffer;
-
             while (recvpkt->hdr.ackno!=next_seqno){
                 if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
                     error("recvfrom");
@@ -235,7 +238,7 @@ int main (int argc, char **argv){
                 recvpkt = (tcp_packet *)buffer;
 
             }
-            break;
+            break; //exit when EOF ACKed
         }
         //if send_base at next_seqno, stop timer
         if(send_base==next_seqno){
@@ -246,6 +249,7 @@ int main (int argc, char **argv){
             //reset timer based on rtt estimator
             reset_timer_rtt();
 
+            //stop timer because no inflight packets
             timer_active=0;
         }
         //restart timer again if an ACK recvd
@@ -256,10 +260,11 @@ int main (int argc, char **argv){
             //reset timer based on rtt estimator
             reset_timer_rtt();
 
+            //restart timer because ACK received
             start_timer();
             //get time for next inflight packet
             gettimeofday(&transmission_startTime, NULL);
-
+            
             timer_active=1;
         }
 
@@ -271,13 +276,13 @@ int main (int argc, char **argv){
 
 
 
-
+//timer start method
 void start_timer(){
     sigprocmask(SIG_UNBLOCK, &sigmask, NULL);
     setitimer(ITIMER_REAL, &timer, NULL);
 }
 
-
+//timer stop method
 void stop_timer(){
     sigprocmask(SIG_BLOCK, &sigmask, NULL);
 }
@@ -298,26 +303,33 @@ void init_timer(int delay, void (*sig_handler)(int)){
     sigaddset(&sigmask, SIGALRM);
 }
 
+//method to resent packets based on a singal
 void resend_packets(int sig){
+    //if timeout signal
     if (sig == SIGALRM)
     {
-        //Resend all packets range between 
+        //Resend cwnd number of packets range between 
         //sendBase and nextSeqNum
         VLOG(INFO, "Timeout happened");
-        
-        int count = 0;
-        int curr = send_base_index;
 
+        int count = 0; //count of number of packets sent
+        int curr = send_base_index; //start resending from send base
+
+        //recalculate ssthresh, cwnd
+        //change to slow start mode
         ssthresh = MAX(cwnd/2,2);
         congestion_avoidance = 0;
         slow_start = 1;
         cwnd = INIT_CWND;
+        //log cwnd
         logger_cwnd();
         
         if (DEBUG_MODE){
             printf("\ntimeout window: %d\n",(int)cwnd);
         }
 
+        //resend packets between sendbase and next seq number
+        //only send floor(cwnd) num of packets
         while(curr<next_seqno_index && count<(int)cwnd){
             
             if (DEBUG_MODE){
@@ -348,23 +360,28 @@ void resend_packets(int sig){
 
     else if (sig == SIG_REPEAT)
     {
-        //Resend all packets range between 
+        //Resend cwnd number of packets range between 
         //sendBase and nextSeqNum
         VLOG(INFO, "3 Duplicate ACKs received");
         
-        int count = 0;
-        int curr = send_base_index;
+        int count = 0; //count of number of packets sent
+        int curr = send_base_index; //start resending from send base
 
+        //recalculate ssthresh, cwnd
+        //change to slow start mode
         ssthresh = MAX(cwnd/2,2);
         congestion_avoidance = 0;
         slow_start = 1;
         cwnd = INIT_CWND;
+        //log cwnd
         logger_cwnd();
 
         if (DEBUG_MODE){
             printf("\nresend window: %d\n",(int)cwnd);
         }
 
+        //resend packets between sendbase and next seq number
+        //only send floor(cwnd) num of packets
         while(curr<next_seqno_index && count<(int)cwnd){
             if (DEBUG_MODE){
                 printf("resending: %d\n",curr);
@@ -393,6 +410,7 @@ void resend_packets(int sig){
     }
 }
 
+//recalculate rto based on rtt estimation and reset timer
 void reset_timer_rtt(){
     sampleRTT = ((double) transmission_endTime.tv_sec - (double) transmission_startTime.tv_sec)*1000 + ((double) transmission_endTime.tv_usec - (double) transmission_startTime.tv_usec)/1000;
     estimatedRTT = MAX(((1.0 - (double) ALPHA) * estimatedRTT + (double) ALPHA * sampleRTT), 1.0);
@@ -402,6 +420,7 @@ void reset_timer_rtt(){
     init_timer(rto, resend_packets);
 }
 
+//open log file and append cwnd to it
 void logger_cwnd(){
     struct timeval presentTime;
     gettimeofday(&presentTime, NULL);
@@ -414,6 +433,7 @@ void logger_cwnd(){
     fclose(log_file);
 }
 
+//reset the cwnd log file at start of program
 void reset_logger_cwnd(){
     FILE *log_file = fopen(logCWND_filename,"w");
     fclose(log_file);

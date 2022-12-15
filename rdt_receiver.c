@@ -19,7 +19,7 @@
 
 tcp_packet *recvpkt;
 tcp_packet *sndpkt;
-tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE];
+tcp_packet* PACKET_BUFFER[PACKET_BUFFER_SIZE]; //buffer to store packets
 
 int main(int argc, char **argv) {
     int sockfd; /* socket */
@@ -31,8 +31,8 @@ int main(int argc, char **argv) {
     FILE *fp;
     char buffer[MSS_SIZE];
     struct timeval tp;
-    int last_ackno = 0;
-    int next_seqno = 0;
+    int last_ackno = 0; //store previous acknowledgement
+    int next_seqno = 0; //expected packet number
 
     /* 
      * check command line arguments 
@@ -119,17 +119,21 @@ int main(int argc, char **argv) {
         //if in-order packet recvd, write the packet to file and send acknowledgement
         if (recvpkt->hdr.seqno == next_seqno) {
             
+            //write to file and appropriate location
             fseek(fp,0, SEEK_SET);    
             fseek(fp, recvpkt->hdr.seqno, SEEK_SET);
             fwrite(recvpkt->data, 1, recvpkt->hdr.data_size, fp);
             
-            
+            //store acknowledgement number
             last_ackno = next_seqno + recvpkt->hdr.data_size;
+            //recalculate next expected ACK
             next_seqno += recvpkt->hdr.data_size;
 
+            //calculate buffer index for subsequent packets
             int i = ceil((float)next_seqno/(float)DATA_SIZE);
             i = i%PACKET_BUFFER_SIZE;
 
+            //if buffer doesn't have subsequent packets, send ACK for received packet
             if (PACKET_BUFFER[i]==NULL){
                 sndpkt = make_packet(0);
                 sndpkt->hdr.ackno = recvpkt->hdr.seqno + recvpkt->hdr.data_size;
@@ -145,28 +149,35 @@ int main(int argc, char **argv) {
                     error("ERROR in sendto");
                 }
             }
+            //if buffer has subsequent packets, send ACK for last in-order buffered packet
             else{
                 int buff_lastDataSize = -1;
                 int last_seq_in_buffer = -1;
 
+                //keep writing in order packets from buffer to file
                 while (PACKET_BUFFER[i]!=NULL && PACKET_BUFFER[i]->hdr.seqno==next_seqno){
                     fseek(fp,0, SEEK_SET);
                     fseek(fp, PACKET_BUFFER[i]->hdr.seqno, SEEK_SET);
                     fwrite(PACKET_BUFFER[i]->data, 1, PACKET_BUFFER[i]->hdr.data_size, fp);
 
+                    //recalculate expected packet num
                     next_seqno += PACKET_BUFFER[i]->hdr.data_size;
                     buff_lastDataSize = PACKET_BUFFER[i]->hdr.data_size;
 
                     sndpkt = make_packet(0);
                     sndpkt->hdr.ackno = buff_lastDataSize == 0 ? PACKET_BUFFER[i]->hdr.seqno + TRANSMISSION_END_INCREMENT : PACKET_BUFFER[i]->hdr.seqno + PACKET_BUFFER[i]->hdr.data_size;
                     
+                    //store last in order packet number
                     last_seq_in_buffer = PACKET_BUFFER[i]->hdr.seqno;
 
+                    //reset buffer
                     PACKET_BUFFER[i] = NULL;
+                    //recalculate next packet index
                     i = ceil((float)next_seqno/(float)DATA_SIZE);
                     i = i%PACKET_BUFFER_SIZE;
                 }
 
+                //send ACK for last in-order packet read from buffer
                 sndpkt->hdr.ctr_flags = ACK;
                 sndpkt->hdr.data_size = recvpkt->hdr.data_size;
                 if (DEBUG_MODE){
@@ -179,8 +190,8 @@ int main(int argc, char **argv) {
                 }
                 last_ackno = sndpkt->hdr.ackno;
                 
+                //exit if EOF ACKed
                 if (buff_lastDataSize==0){
-
                     VLOG(INFO, "End Of File has been reached");
                     fclose(fp);
                     break;
@@ -192,7 +203,7 @@ int main(int argc, char **argv) {
         //if out of order packet recvd, send repeat ACK of previous in-order packet recvd
         else{
 
-
+            //send ACK of last packet received
             sndpkt = make_packet(0);
             sndpkt->hdr.ackno = last_ackno;
             sndpkt->hdr.ctr_flags = ACK;
@@ -202,12 +213,11 @@ int main(int argc, char **argv) {
                 printf("\n------------\nlost packet: %d\n---------\n",(int)ceil((float)next_seqno/(float)DATA_SIZE));
                 printf("ACKing: %d\n", (int)ceil((float)(last_ackno-DATA_SIZE)/(float)DATA_SIZE));
             }
-
-            
             if (sendto(sockfd, sndpkt, TCP_HDR_SIZE, 0, 
                     (struct sockaddr *) &clientaddr, clientlen) < 0) {
                 error("ERROR in sendto");
             }
+            //calculate index to store the out of order packet in buffer (only if space in buffer available)
             int j = ceil((float)recvpkt->hdr.seqno/(float)DATA_SIZE);
             j = j%PACKET_BUFFER_SIZE;
 

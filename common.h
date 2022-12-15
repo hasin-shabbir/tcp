@@ -10,7 +10,7 @@ extern int verbose;
 #define DEBUG   0x100
 #define ALL     0x111
 
-#define PACKET_BUFFER_SIZE 64
+#define PACKET_BUFFER_SIZE 32
 
 #define VLOG(level, ... ) \
     if(level & verbose) { \
