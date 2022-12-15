@@ -17,6 +17,8 @@
 
 #define MAX(a,b) (((a)>(b))?(a):(b));
 
+#define DEBUG_MODE 0
+
 #define STDIN_FD    0
 #define RETRY  120 //millisecond
 #define TRANSMISSION_END_INCREMENT 1
@@ -61,8 +63,6 @@ sigset_t sigmask;
 
 #define logCWND_filename "log_cwnd.csv"
 #define logBytes_filename "log_bytes.csv"  
-
-
 
 void start_timer();
 void stop_timer();
@@ -162,7 +162,9 @@ int main (int argc, char **argv)
                     first_transmission=0;
                     logger_bytes(0);
                 }
-                
+                else{
+                    logger_bytes(TCP_HDR_SIZE + get_data_size(sndpkt));
+                }
                 //start timer if not active (oldest unacked packet in flight)
                 if(!timer_active){
                     start_timer();
@@ -183,8 +185,6 @@ int main (int argc, char **argv)
         recvpkt = (tcp_packet *)buffer;
         //get acknowledged pack base and index
         if (slow_start){
-            // printf("[SLOW START]\n");
-
             cwnd+=1.0;
             logger_cwnd();
             if ((int)cwnd==ssthresh){
@@ -193,13 +193,13 @@ int main (int argc, char **argv)
             }
         }
         else if (congestion_avoidance){
-            // printf("[CONGESTION AVOIDANCE]\n");
             cwnd+=1.0/cwnd;
             logger_cwnd();
         }
 
 
-        logger_bytes(recvpkt->hdr.data_size);
+        // logger_bytes(recvpkt->hdr.data_size+HEADER_SIZE);
+
         if (recvpkt->hdr.ackno!=send_base){
             duplicate_ACK_count = 1;
         }
@@ -242,6 +242,7 @@ int main (int argc, char **argv)
                             ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
+            logger_bytes(TCP_HDR_SIZE + get_data_size(sndpkt));
             next_seqno = next_seqno + TRANSMISSION_END_INCREMENT;
             next_seqno_index +=1;
             //wait for end of file signal ACK, else need to retransmit
@@ -252,11 +253,17 @@ int main (int argc, char **argv)
             }
 
             recvpkt = (tcp_packet *)buffer;
+            // if (recvpkt->hdr.data_size)
+            //     logger_bytes(recvpkt->hdr.data_size);
+
             while (recvpkt->hdr.ackno!=next_seqno){
                 if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
                     error("recvfrom");
                 }
                 recvpkt = (tcp_packet *)buffer;
+                if (recvpkt->hdr.data_size)
+                    logger_bytes(recvpkt->hdr.data_size);
+
             }
             break;
         }
@@ -332,15 +339,24 @@ void resend_packets(int sig){
         // rto = MAX(rto, MIN_RTO);
         int count = 0;
         int curr = send_base_index;
-        printf("\ntimeout window: %d\n",(int)cwnd);
+        
+        if (DEBUG_MODE){
+            printf("\ntimeout window: %d\n",(int)cwnd);
+        }
 
         while(curr<next_seqno_index && count<(int)cwnd){
-            printf("timeout resend: %d\n",curr);
+            
+            if (DEBUG_MODE){
+                printf("timeout resend: %d\n",curr);
+            }
 
             if(sendto(sockfd, PACKET_BUFFER[curr%PACKET_BUFFER_SIZE], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
+
+            logger_bytes(TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]));
+
             //start timer if not already active
             if (!timer_active){
                 init_timer(rto, resend_packets);
@@ -352,7 +368,9 @@ void resend_packets(int sig){
             curr+=1;
             count+=1;
         }
-        printf("\n");
+        if (DEBUG_MODE){
+            printf("\n");
+        }
 
         ssthresh = MAX(cwnd/2,2);
         congestion_avoidance = 0;
@@ -372,13 +390,22 @@ void resend_packets(int sig){
         // rto = MAX(rto, MIN_RTO);
         int count = 0;
         int curr = send_base_index;
-        printf("\nresend window: %d\n",(int)cwnd);
+
+        if (DEBUG_MODE){
+            printf("\nresend window: %d\n",(int)cwnd);
+        }
+
         while(curr<next_seqno_index && count<(int)cwnd){
-            printf("resending: %d\n",curr);
+            if (DEBUG_MODE){
+                printf("resending: %d\n",curr);
+            }
+
             if(sendto(sockfd, PACKET_BUFFER[curr%PACKET_BUFFER_SIZE], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
+            logger_bytes(TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]));
+            
             //start timer if not already active
             if (!timer_active){
                 init_timer(rto, resend_packets);
@@ -390,7 +417,9 @@ void resend_packets(int sig){
             curr+=1;
             count+=1;
         }
-        printf("\n");
+        if (DEBUG_MODE){
+            printf("\n");
+        }
         ssthresh = MAX(cwnd/2,2);
         congestion_avoidance = 0;
         slow_start = 1;
@@ -405,9 +434,6 @@ void reset_timer_rtt(){
     estimatedRTT = MAX(((1.0 - (double) ALPHA) * estimatedRTT + (double) ALPHA * sampleRTT), 1.0);
     devRTT = MAX(((1.0 - (double) BETA) * devRTT + (double) BETA * abs(estimatedRTT - sampleRTT)), 1.0);
     rto = MAX(floor(estimatedRTT + 4 * devRTT), 1);
-    
-    // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
-    // rto = MAX(rto, MIN_RTO);
 
     init_timer(rto, resend_packets);
 }
