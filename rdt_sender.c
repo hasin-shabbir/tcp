@@ -29,6 +29,7 @@
 #define MAX_RTO 2500  
 #define MIN_RTO 100
 #define INIT_SSTRESH 64
+#define INIT_CWND 1.0f
 
 int next_seqno=0; //bytes-based
 int next_seqno_index = 0; //corresponding discrete index
@@ -39,7 +40,7 @@ int window_size = 10;
 int timer_active = 0; //bool indicator
 int duplicate_ACK_count = 0;
 
-float cwnd = 1.0;
+float cwnd = INIT_CWND;
 int ssthresh = INIT_SSTRESH;
 int slow_start = 1;
 int congestion_avoidance = 0;
@@ -62,7 +63,6 @@ tcp_packet *recvpkt;
 sigset_t sigmask;     
 
 #define logCWND_filename "log_cwnd.csv"
-#define logBytes_filename "log_bytes.csv"  
 
 void start_timer();
 void stop_timer();
@@ -71,14 +71,8 @@ void init_timer(int delay, void (*sig_handler)(int));
 void reset_timer_rtt();
 void logger_cwnd();
 void reset_logger_cwnd();
-void logger_bytes(int);
-void reset_logger_bytes();
 
-int main (int argc, char **argv)
-{
-
-    int first_transmission = 1;
-
+int main (int argc, char **argv){
     int portno, len;
     int next_seqno;
     char *hostname;
@@ -98,8 +92,6 @@ int main (int argc, char **argv)
     }
 
     reset_logger_cwnd();
-    reset_logger_bytes();
-
 
     /* socket: create the socket */
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -158,13 +150,6 @@ int main (int argc, char **argv)
                             ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                     error("sendto");
                 }
-                if (first_transmission){
-                    first_transmission=0;
-                    logger_bytes(0);
-                }
-                else{
-                    logger_bytes(TCP_HDR_SIZE + get_data_size(sndpkt));
-                }
                 //start timer if not active (oldest unacked packet in flight)
                 if(!timer_active){
                     start_timer();
@@ -197,24 +182,14 @@ int main (int argc, char **argv)
             logger_cwnd();
         }
 
-
-        // logger_bytes(recvpkt->hdr.data_size+HEADER_SIZE);
-
         if (recvpkt->hdr.ackno!=send_base){
             duplicate_ACK_count = 1;
         }
         else{
             duplicate_ACK_count += 1;
         }
-        // if (recvpkt->hdr.ackno==send_base){
-        //     duplicate_ACK_count += 1;
-        // }
-        // else{
-        //     duplicate_ACK_count = 0;
-        //     // logger_bytes(recvpkt->hdr.ackno-send_base+TCP_HDR_SIZE*(ceil((float)recvpkt->hdr.ackno/(float)DATA_SIZE)-send_base_index));
-        // }
+
         if (duplicate_ACK_count%3==0 && !file_end){
-            // duplicate_ACK_count = 0;
             stop_timer();
             timer_active = 0;
             
@@ -242,7 +217,6 @@ int main (int argc, char **argv)
                             ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
-            logger_bytes(TCP_HDR_SIZE + get_data_size(sndpkt));
             next_seqno = next_seqno + TRANSMISSION_END_INCREMENT;
             next_seqno_index +=1;
             //wait for end of file signal ACK, else need to retransmit
@@ -253,16 +227,12 @@ int main (int argc, char **argv)
             }
 
             recvpkt = (tcp_packet *)buffer;
-            // if (recvpkt->hdr.data_size)
-            //     logger_bytes(recvpkt->hdr.data_size);
 
             while (recvpkt->hdr.ackno!=next_seqno){
                 if(recvfrom(sockfd, buffer, MSS_SIZE, 0, (struct sockaddr *) &serveraddr, (socklen_t *)&serverlen) < 0){
                     error("recvfrom");
                 }
                 recvpkt = (tcp_packet *)buffer;
-                if (recvpkt->hdr.data_size)
-                    logger_bytes(recvpkt->hdr.data_size);
 
             }
             break;
@@ -355,8 +325,6 @@ void resend_packets(int sig){
                 error("sendto");
             }
 
-            logger_bytes(TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]));
-
             //start timer if not already active
             if (!timer_active){
                 init_timer(rto, resend_packets);
@@ -375,7 +343,7 @@ void resend_packets(int sig){
         ssthresh = MAX(cwnd/2,2);
         congestion_avoidance = 0;
         slow_start = 1;
-        cwnd = 1.0;
+        cwnd = INIT_CWND;
         logger_cwnd();
 
     }
@@ -404,7 +372,6 @@ void resend_packets(int sig){
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
             }
-            logger_bytes(TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]));
             
             //start timer if not already active
             if (!timer_active){
@@ -423,7 +390,7 @@ void resend_packets(int sig){
         ssthresh = MAX(cwnd/2,2);
         congestion_avoidance = 0;
         slow_start = 1;
-        cwnd = 1.0;
+        cwnd = INIT_CWND;
         logger_cwnd();
 
     }
@@ -452,22 +419,5 @@ void logger_cwnd(){
 
 void reset_logger_cwnd(){
     FILE *log_file = fopen(logCWND_filename,"w");
-    fclose(log_file);
-}
-
-void logger_bytes(int bytes){
-    struct timeval presentTime;
-    gettimeofday(&presentTime, NULL);
-    FILE *log_file = fopen(logBytes_filename,"a");
-    if (log_file==NULL){
-        error("failed to open log file\n");
-    }
-    fprintf(log_file, "%.6f,%d\n", (double)presentTime.tv_sec+(double)presentTime.tv_usec/1000000, bytes);
-
-    fclose(log_file);
-}
-
-void reset_logger_bytes(){
-    FILE *log_file = fopen(logBytes_filename,"w");
     fclose(log_file);
 }
