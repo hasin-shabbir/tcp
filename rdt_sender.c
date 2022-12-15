@@ -183,7 +183,7 @@ int main (int argc, char **argv)
         recvpkt = (tcp_packet *)buffer;
         //get acknowledged pack base and index
         if (slow_start){
-            printf("[SLOW START]\n");
+            // printf("[SLOW START]\n");
 
             cwnd+=1.0;
             logger_cwnd();
@@ -193,23 +193,28 @@ int main (int argc, char **argv)
             }
         }
         else if (congestion_avoidance){
-            printf("[CONGESTION AVOIDANCE]\n");
+            // printf("[CONGESTION AVOIDANCE]\n");
             cwnd+=1.0/cwnd;
             logger_cwnd();
         }
 
 
         logger_bytes(recvpkt->hdr.data_size);
-
-        if (recvpkt->hdr.ackno==send_base){
-            duplicate_ACK_count += 1;
+        if (recvpkt->hdr.ackno!=send_base){
+            duplicate_ACK_count = 1;
         }
         else{
-            duplicate_ACK_count = 0;
-            // logger_bytes(recvpkt->hdr.ackno-send_base+TCP_HDR_SIZE*(ceil((float)recvpkt->hdr.ackno/(float)DATA_SIZE)-send_base_index));
+            duplicate_ACK_count += 1;
         }
-        if (duplicate_ACK_count==2 && !file_end){
-            duplicate_ACK_count = 0;
+        // if (recvpkt->hdr.ackno==send_base){
+        //     duplicate_ACK_count += 1;
+        // }
+        // else{
+        //     duplicate_ACK_count = 0;
+        //     // logger_bytes(recvpkt->hdr.ackno-send_base+TCP_HDR_SIZE*(ceil((float)recvpkt->hdr.ackno/(float)DATA_SIZE)-send_base_index));
+        // }
+        if (duplicate_ACK_count%3==0 && !file_end){
+            // duplicate_ACK_count = 0;
             stop_timer();
             timer_active = 0;
             
@@ -219,6 +224,11 @@ int main (int argc, char **argv)
         }
 
         send_base = recvpkt->hdr.ackno;
+        /*
+            if (duplicateACK==0){
+                prevAck = sendbase;
+            }
+        */
         send_base_index = ceil((float)send_base/(float)DATA_SIZE); //nti
         //if last expected ACK, send EOF packet
         if (send_base==file_end_seqno){
@@ -316,13 +326,17 @@ void resend_packets(int sig){
     {
         //Resend all packets range between 
         //sendBase and nextSeqNum
-        VLOG(INFO, "Timeout happened");
+        // VLOG(INFO, "Timeout happened");
         // rto = rto * 2;
         // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
         // rto = MAX(rto, MIN_RTO);
         int count = 0;
         int curr = send_base_index;
+        printf("\ntimeout window: %d\n",(int)cwnd);
+
         while(curr<next_seqno_index && count<(int)cwnd){
+            printf("timeout resend: %d\n",curr);
+
             if(sendto(sockfd, PACKET_BUFFER[curr%PACKET_BUFFER_SIZE], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
@@ -338,6 +352,8 @@ void resend_packets(int sig){
             curr+=1;
             count+=1;
         }
+        printf("\n");
+
         ssthresh = MAX(cwnd/2,2);
         congestion_avoidance = 0;
         slow_start = 1;
@@ -350,13 +366,15 @@ void resend_packets(int sig){
     {
         //Resend all packets range between 
         //sendBase and nextSeqNum
-        VLOG(INFO, "3 Duplicate ACKs received");
+        // VLOG(INFO, "3 Duplicate ACKs received");
         // rto = rto * 2;
         // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
         // rto = MAX(rto, MIN_RTO);
         int count = 0;
         int curr = send_base_index;
+        printf("\nresend window: %d\n",(int)cwnd);
         while(curr<next_seqno_index && count<(int)cwnd){
+            printf("resending: %d\n",curr);
             if(sendto(sockfd, PACKET_BUFFER[curr%PACKET_BUFFER_SIZE], TCP_HDR_SIZE + get_data_size(PACKET_BUFFER[curr%PACKET_BUFFER_SIZE]), 0, 
                 ( const struct sockaddr *)&serveraddr, serverlen) < 0){
                 error("sendto");
@@ -372,6 +390,7 @@ void resend_packets(int sig){
             curr+=1;
             count+=1;
         }
+        printf("\n");
         ssthresh = MAX(cwnd/2,2);
         congestion_avoidance = 0;
         slow_start = 1;
@@ -387,8 +406,8 @@ void reset_timer_rtt(){
     devRTT = MAX(((1.0 - (double) BETA) * devRTT + (double) BETA * abs(estimatedRTT - sampleRTT)), 1.0);
     rto = MAX(floor(estimatedRTT + 4 * devRTT), 1);
     
-    rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
-    rto = MAX(rto, MIN_RTO);
+    // rto = -1 * MAX(-1*MAX_RTO, -1 * rto);
+    // rto = MAX(rto, MIN_RTO);
 
     init_timer(rto, resend_packets);
 }
