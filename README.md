@@ -21,7 +21,7 @@ for when a sequence of packets becomes in-order. The sender retransmits packets 
 3. (From the obj directory): ./rdt_sender <hostname> <port> <FILE>
 
 ### To emulate it under different network conditions:
-1. Install (mahimahi)[http://mahimahi.mit.edu/]
+1. Install [mahimahi](http://mahimahi.mit.edu/)
 2. mm-delay 10 mm-loss uplink 0.1 mm-link --meter-all channel_traces/rapidGold channel_traces/rapidGold
  
 NOTE: The above command spawns a shell with a delayed, lossy link (with delay of 10 ms and uplink loss of 0.1). Read mahimahi documentation for different options 
@@ -32,5 +32,6 @@ NOTE: The above command spawns a shell with a delayed, lossy link (with delay of
 ### Plotting cwnd
   After a successful run of the application, use the following from the tcp directory:
   1. python3 plot.py -p log_cwnd.csv -n OUTPUT_FILE
+  
   NOTE: -p flag for path to cwnd logfile, -n flag for name of output file
   
